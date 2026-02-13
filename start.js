@@ -1,6 +1,6 @@
 const { spawn } = require('child_process');
 
-const server = spawn('npx', ['tsx', 'server/index.ts'], {
+const server = spawn('node', ['--env-file=.env', '--import=tsx', 'server/index.ts'], {
   stdio: 'inherit',
   env: { ...process.env },
 });
