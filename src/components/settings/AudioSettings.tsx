@@ -67,11 +67,15 @@ export function AudioSettings() {
         await audioCaptureService.startSystemAudio();
         setAudioInput({ systemAudioEnabled: true });
         setSystemActive(true);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to start system audio:', err);
-        const name = err.name || '';
-        const msg = err.message || '';
-        if (name === 'NotAllowedError' && (msg.includes('Permission') || msg.includes('not allowed') || msg.includes('denied') || msg.includes('policy'))) {
+        const error = err as { name?: string; message?: string };
+        const name = error.name || '';
+        const msg = error.message || '';
+        const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+        if (isElectron) {
+          setSystemAudioError('electron-permission');
+        } else if (name === 'NotAllowedError' && (msg.includes('Permission') || msg.includes('not allowed') || msg.includes('denied') || msg.includes('policy'))) {
           setSystemAudioError('iframe');
         } else if (name === 'NotAllowedError' || name === 'AbortError' || msg.includes('dismissed') || msg.includes('cancel')) {
           setSystemAudioError('cancelled');
@@ -148,7 +152,14 @@ export function AudioSettings() {
 
         {systemAudioError && (
           <div className="p-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 text-sm">
-            {systemAudioError === 'iframe' ? (
+            {systemAudioError === 'electron-permission' ? (
+              <>
+                <p className="text-yellow-400 font-medium mb-1">Screen recording permission required</p>
+                <p className="text-[hsl(var(--muted-foreground))] text-xs">
+                  Grant screen recording access in System Settings &gt; Privacy &amp; Security &gt; Screen Recording, then restart the app.
+                </p>
+              </>
+            ) : systemAudioError === 'iframe' ? (
               <>
                 <p className="text-yellow-400 font-medium mb-1">Screen capture blocked</p>
                 <p className="text-[hsl(var(--muted-foreground))] text-xs">

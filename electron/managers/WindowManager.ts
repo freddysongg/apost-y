@@ -12,11 +12,9 @@ export class WindowManager {
     this.isOverlayMode = !this.isOverlayMode;
 
     if (this.isOverlayMode) {
-      this.window.setFrameless(true);
       this.window.setAlwaysOnTop(true, 'floating');
       this.window.setSkipTaskbar(true);
     } else {
-      this.window.setFrameless(false);
       this.window.setAlwaysOnTop(false);
       this.window.setSkipTaskbar(false);
     }

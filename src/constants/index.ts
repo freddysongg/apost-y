@@ -7,6 +7,7 @@ export const DEFAULT_KEYBINDS: KeybindConfig = {
   cancelResponse: 'Escape',
   clearConversation: 'KeyL',
   toggleOverlay: 'KeyO',
+  toggleSystemAudio: 'KeyS',
 };
 
 export const DEFAULT_VAD_SETTINGS: VADSettings = {

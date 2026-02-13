@@ -50,20 +50,31 @@ export class AudioCaptureService {
       this.stopSystemAudio();
     }
 
-    try {
+    const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+
+    if (isElectron) {
       this.systemStream = await navigator.mediaDevices.getDisplayMedia({
         audio: true,
-        video: false,
+        video: true,
       });
-    } catch (err: any) {
-      if (err.name === 'NotAllowedError' || err.message?.includes('video')) {
+      this.systemStream.getVideoTracks().forEach(t => t.stop());
+    } else {
+      try {
         this.systemStream = await navigator.mediaDevices.getDisplayMedia({
           audio: true,
-          video: true,
+          video: false,
         });
-        this.systemStream.getVideoTracks().forEach(t => t.stop());
-      } else {
-        throw err;
+      } catch (err: unknown) {
+        const error = err as { name?: string; message?: string };
+        if (error.name === 'NotAllowedError' || error.message?.includes('video')) {
+          this.systemStream = await navigator.mediaDevices.getDisplayMedia({
+            audio: true,
+            video: true,
+          });
+          this.systemStream.getVideoTracks().forEach(t => t.stop());
+        } else {
+          throw err;
+        }
       }
     }
 
@@ -181,6 +192,18 @@ export class AudioCaptureService {
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;
+    }
+  }
+
+  setMicGainValue(value: number): void {
+    if (this.micGain) {
+      this.micGain.gain.value = value;
+    }
+  }
+
+  setSystemGainValue(value: number): void {
+    if (this.systemGain) {
+      this.systemGain.gain.value = value;
     }
   }
 

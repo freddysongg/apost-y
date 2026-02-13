@@ -1,13 +1,18 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { TranscriptEntry, NoteSet, KeybindConfig, VADSettings, AudioInputConfig } from '@/types';
+import type { TranscriptEntry, NoteSet, KeybindConfig, VADSettings, AudioInputConfig, PersistedConfig } from '@/types';
 import { DEFAULT_KEYBINDS, DEFAULT_VAD_SETTINGS, DEFAULT_NOTE_SETS, SYSTEM_PROMPT_TEMPLATE } from '@/constants';
 
-function loadPersistedConfig() {
+function isElectronEnvironment(): boolean {
+  return typeof window !== 'undefined' && window.electronAPI !== undefined;
+}
+
+function loadPersistedConfig(): Partial<PersistedConfig> | null {
+  if (isElectronEnvironment()) return null;
   try {
     const raw = localStorage.getItem('persisted_config');
-    if (raw) return JSON.parse(raw);
-  } catch {}
+    if (raw) return JSON.parse(raw) as Partial<PersistedConfig>;
+  } catch { /* localStorage unavailable or corrupt */ }
   return null;
 }
 
@@ -175,25 +180,55 @@ export const useSessionStore = create<SessionState>((set) => ({
   setTranscriptHeight: (height) => set({ transcriptHeight: height }),
 }));
 
+function buildPersistedConfig(state: SessionState): PersistedConfig {
+  return {
+    apiKey: state.apiKey,
+    keybinds: state.keybinds,
+    audioDeviceId: state.selectedDeviceId,
+    inputMode: state.inputMode,
+    vadSettings: state.vadSettings,
+    noteSets: state.noteSets,
+    activeNoteSetIds: state.activeNoteSetIds,
+    systemPrompt: state.systemPrompt,
+    audioInput: state.audioInput,
+    transcriptHeight: state.transcriptHeight,
+    ui: {
+      fontSize: state.fontSize,
+      opacity: state.opacity,
+      theme: state.theme,
+    },
+  };
+}
+
 useSessionStore.subscribe((state) => {
-  try {
-    const config = {
-      apiKey: state.apiKey,
-      keybinds: state.keybinds,
-      audioDeviceId: state.selectedDeviceId,
-      inputMode: state.inputMode,
-      vadSettings: state.vadSettings,
-      noteSets: state.noteSets,
-      activeNoteSetIds: state.activeNoteSetIds,
-      systemPrompt: state.systemPrompt,
-      audioInput: state.audioInput,
-      transcriptHeight: state.transcriptHeight,
-      ui: {
-        fontSize: state.fontSize,
-        opacity: state.opacity,
-        theme: state.theme,
-      },
-    };
-    localStorage.setItem('persisted_config', JSON.stringify(config));
-  } catch {}
+  const config = buildPersistedConfig(state);
+
+  if (isElectronEnvironment()) {
+    window.electronAPI!.config.setConfig(config);
+  } else {
+    try {
+      localStorage.setItem('persisted_config', JSON.stringify(config));
+    } catch { /* localStorage full or unavailable */ }
+  }
 });
+
+export async function initializeStoreFromElectron(): Promise<void> {
+  if (!isElectronEnvironment()) return;
+
+  const config = await window.electronAPI!.config.getConfig();
+  useSessionStore.setState({
+    apiKey: config.apiKey,
+    keybinds: config.keybinds,
+    selectedDeviceId: config.audioDeviceId,
+    inputMode: config.inputMode,
+    vadSettings: config.vadSettings,
+    noteSets: config.noteSets.length > 0 ? config.noteSets : DEFAULT_NOTE_SETS,
+    activeNoteSetIds: config.activeNoteSetIds,
+    fontSize: config.ui.fontSize,
+    opacity: config.ui.opacity,
+    theme: config.ui.theme,
+    systemPrompt: config.systemPrompt || SYSTEM_PROMPT_TEMPLATE,
+    audioInput: config.audioInput,
+    transcriptHeight: config.transcriptHeight,
+  });
+}

@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+const isElectron = !!process.env.ELECTRON;
+
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -14,7 +17,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     allowedHosts: true,
-    proxy: {
+    proxy: isElectron ? undefined : {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
