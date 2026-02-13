@@ -12,9 +12,11 @@ const ACTION_LABELS: Record<keyof KeybindConfig, string> = {
   cancelResponse: 'Cancel Response',
   clearConversation: 'Clear Conversation',
   toggleOverlay: 'Toggle Overlay',
+  toggleSystemAudio: 'Toggle System Audio',
 };
 
-function formatKeybind(key: string): string {
+function formatKeybind(key: string | undefined): string {
+  if (!key) return '—';
   return key
     .replace('Key', '')
     .replace('Digit', '')

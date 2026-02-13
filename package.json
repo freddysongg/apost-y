@@ -1,13 +1,19 @@
 {
   "name": "workspace",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "1.0.2",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "server": "node --env-file=.env --import=tsx server/index.ts",
-    "start": "concurrently \"npm run server\" \"npm run dev\""
+    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "electron:build:main": "tsc -p tsconfig.electron.json",
+    "electron:dev": "npm run electron:build:main && concurrently \"cross-env NODE_ENV=development ELECTRON=1 vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && npm run electron:build:main && electron-builder",
+    "electron:build:mac": "npm run build && npm run electron:build:main && electron-builder --mac",
+    "electron:build:win": "npm run build && npm run electron:build:main && electron-builder --win",
+    "electron:build:linux": "npm run build && npm run electron:build:main && electron-builder --linux"
   },
   "keywords": [],
   "author": "",
@@ -52,6 +58,10 @@
   },
   "description": "",
   "devDependencies": {
-    "tsx": "^4.21.0"
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "tsx": "^4.21.0",
+    "wait-on": "^8.0.0"
   }
 }

@@ -32,10 +32,14 @@ export function useRealtimeConnection() {
       if (state.audioInput.micEnabled) {
         await audioCaptureService.startMic(state.selectedDeviceId || undefined);
       }
+      // Mute mic immediately in push-to-talk mode until key is held
+      if (state.inputMode === 'push-to-talk') {
+        audioCaptureService.setMicGainValue(0);
+      }
       audioCaptureService.onAudioData((base64Audio: string) => {
-        const state = useSessionStore.getState();
-        if (state.isMuted) return;
-        if (state.inputMode === 'push-to-talk' && !state.isPushToTalkActive) return;
+        const currentState = useSessionStore.getState();
+        if (currentState.isMuted) return;
+        if (currentState.inputMode === 'push-to-talk' && !currentState.isPushToTalkActive && !audioCaptureService.systemActive) return;
         realtimeService.sendAudio(base64Audio);
       });
       console.log('Audio capture started');
@@ -119,14 +123,44 @@ export function useRealtimeConnection() {
     audioCaptureService.setMuted(isMuted);
   }, [isMuted]);
 
+  // Resend session config when voice mode or VAD settings change while connected
+  const initialModeRef = useRef(true);
+  useEffect(() => {
+    if (initialModeRef.current) {
+      initialModeRef.current = false;
+      return;
+    }
+    if (connectionStatus !== 'connected') return;
+
+    const state = useSessionStore.getState();
+    const turnDetection = state.inputMode === 'vad' ? {
+      type: 'server_vad',
+      threshold: state.vadSettings.threshold,
+      prefix_padding_ms: state.vadSettings.prefixPaddingMs,
+      silence_duration_ms: state.vadSettings.silenceDurationMs,
+      create_response: true,
+    } : null;
+    realtimeService.updateSession({ turnDetection });
+
+    // Reset mic gain when switching modes
+    if (state.inputMode === 'push-to-talk') {
+      audioCaptureService.setMicGainValue(0);
+      setIsListening(false);
+    } else {
+      audioCaptureService.setMicGainValue(1);
+    }
+  }, [inputMode, vadSettings, connectionStatus]);
+
   const pttWasActiveRef = useRef(false);
 
   useEffect(() => {
     if (inputMode !== 'push-to-talk' || connectionStatus !== 'connected') return;
     if (isPushToTalkActive && !isMuted) {
+      audioCaptureService.setMicGainValue(1);
       pttWasActiveRef.current = true;
       setIsListening(true);
     } else if (!isPushToTalkActive) {
+      audioCaptureService.setMicGainValue(0);
       if (pttWasActiveRef.current) {
         realtimeService.commitAudio();
         pttWasActiveRef.current = false;

@@ -91,7 +91,7 @@ export class KeybindService {
   }
 
   isElectron(): boolean {
-    return !!(window as any).electronAPI;
+    return typeof window !== 'undefined' && window.electronAPI !== undefined;
   }
 }
 

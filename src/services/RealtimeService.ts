@@ -14,7 +14,7 @@ export class RealtimeService {
   private ws: WebSocket | null = null;
   private callbacks: Partial<CallbackMap> = {};
   private sessionConfigured = false;
-  private pendingSessionConfig: { instructions?: string; turnDetection?: any } | null = null;
+  private pendingSessionConfig: { instructions?: string; turnDetection?: unknown } | null = null;
 
   connect(): void {
     if (this.ws) {
@@ -22,11 +22,25 @@ export class RealtimeService {
     }
 
     this.sessionConfigured = false;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${window.location.host}/ws`;
-
     this.callbacks.connectionChange?.('connecting');
-    this.ws = new WebSocket(url);
+
+    this.resolveWsUrl().then((url) => {
+      this.ws = new WebSocket(url);
+      this.attachSocketHandlers();
+    });
+  }
+
+  private async resolveWsUrl(): Promise<string> {
+    if (window.electronAPI?.server) {
+      const port = await window.electronAPI.server.getPort();
+      return `ws://127.0.0.1:${port}/ws`;
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws`;
+  }
+
+  private attachSocketHandlers(): void {
+    if (!this.ws) return;
 
     this.ws.onopen = () => {
       console.log('WebSocket connected to proxy');
@@ -83,7 +97,7 @@ export class RealtimeService {
     this.send({ type: 'response.cancel' });
   }
 
-  updateSession(config: { instructions?: string; turnDetection?: any }): void {
+  updateSession(config: { instructions?: string; turnDetection?: unknown }): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.sendSessionUpdate(config);
     } else {
@@ -91,8 +105,8 @@ export class RealtimeService {
     }
   }
 
-  private sendSessionUpdate(config: { instructions?: string; turnDetection?: any }): void {
-    const session: any = {
+  private sendSessionUpdate(config: { instructions?: string; turnDetection?: unknown }): void {
+    const session: Record<string, unknown> = {
       input_audio_format: 'pcm16',
       modalities: ['text'],
       input_audio_transcription: {
@@ -102,14 +116,15 @@ export class RealtimeService {
     if (config.instructions) {
       session.instructions = config.instructions;
     }
-    if (config.turnDetection) {
+    // Explicitly set turn_detection even when null to disable server_vad for push-to-talk
+    if ('turnDetection' in config) {
       session.turn_detection = config.turnDetection;
     }
+    const turnDetectionConfig = session.turn_detection as Record<string, unknown> | null;
     console.log('Sending session.update with config:', {
       modalities: session.modalities,
       hasInstructions: !!session.instructions,
-      turnDetection: session.turn_detection?.type || 'none',
-      transcription: session.input_audio_transcription?.model,
+      turnDetection: turnDetectionConfig?.type ?? 'none',
     });
     this.send({
       type: 'session.update',

@@ -1,27 +1,29 @@
-appId: com.police-assessment-assistant.app
-productName: Police Assessment Assistant
+appId: com.apost-y.app
+productName: APOST-Y
 
 directories:
-  buildResources: electron/assets
-  output: dist-electron-builder
+  buildResources: build-resources
+  output: release
 
 files:
   - dist/**/*
+  - dist-electron/**/*
   - node_modules/**/*
+
+extraMetadata:
+  main: dist-electron/electron/main.js
 
 win:
   target:
     - nsis
     - portable
-  certificateFile: null
-  certificatePassword: null
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Police Assessment Assistant
+  shortcutName: APOST-Y
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
@@ -31,7 +33,10 @@ mac:
     - dmg
     - zip
   category: public.app-category.utilities
-  signing: false
+  identity: null
+  extendInfo:
+    NSMicrophoneUsageDescription: "This app needs microphone access to capture audio for real-time AI conversation."
+    NSScreenCaptureUsageDescription: "This app needs screen capture access to capture system audio for real-time AI conversation."
 
 dmg:
   contents:

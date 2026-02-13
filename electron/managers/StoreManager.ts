@@ -1,35 +1,89 @@
-import type { PersistedConfig } from '../types';
+import { app, safeStorage } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
+import type { PersistedConfig } from '../../src/types';
+
+const CONFIG_FILENAME = 'config.json';
 
 export class StoreManager {
-  private store: Map<string, unknown>;
+  private configPath: string;
+  private config: PersistedConfig;
 
   constructor() {
-    this.store = new Map();
-  }
-
-  get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    const value = this.store.get(key);
-    return value !== undefined ? (value as T) : defaultValue;
-  }
-
-  set(key: string, value: unknown): void {
-    this.store.set(key, value);
-  }
-
-  delete(key: string): void {
-    this.store.delete(key);
-  }
-
-  clear(): void {
-    this.store.clear();
+    this.configPath = path.join(app.getPath('userData'), CONFIG_FILENAME);
+    this.config = this.readFromDisk();
   }
 
   getConfig(): PersistedConfig {
-    return this.get<PersistedConfig>('config') || this.getDefaultConfig();
+    return this.config;
   }
 
   setConfig(config: PersistedConfig): void {
-    this.set('config', config);
+    this.config = config;
+    this.writeToDisk(config);
+  }
+
+  private encryptApiKey(key: string): string {
+    if (!safeStorage.isEncryptionAvailable()) return key;
+    const encrypted = safeStorage.encryptString(key);
+    return encrypted.toString('base64');
+  }
+
+  private decryptApiKey(stored: string): string {
+    if (!safeStorage.isEncryptionAvailable()) return stored;
+    try {
+      const buffer = Buffer.from(stored, 'base64');
+      return safeStorage.decryptString(buffer);
+    } catch {
+      // Stored as plain text from a previous version — return as-is
+      return stored;
+    }
+  }
+
+  private readFromDisk(): PersistedConfig {
+    try {
+      const raw = fs.readFileSync(this.configPath, 'utf-8');
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        const defaults = this.getDefaultConfig();
+        const merged = { ...defaults, ...(parsed as Record<string, unknown>) } as PersistedConfig;
+        merged.keybinds = { ...defaults.keybinds, ...merged.keybinds };
+        merged.vadSettings = { ...defaults.vadSettings, ...merged.vadSettings };
+        merged.audioInput = { ...defaults.audioInput, ...merged.audioInput };
+        merged.ui = { ...defaults.ui, ...merged.ui };
+
+        if (merged.apiKey) {
+          merged.apiKey = this.decryptApiKey(merged.apiKey);
+        }
+
+        return merged;
+      }
+    } catch {
+      // File missing or corrupt — use defaults
+    }
+    const defaults = this.getDefaultConfig();
+    this.writeToDisk(defaults);
+    return defaults;
+  }
+
+  private writeToDisk(config: PersistedConfig): void {
+    try {
+      const dir = path.dirname(this.configPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const diskConfig = { ...config };
+      if (diskConfig.apiKey) {
+        diskConfig.apiKey = this.encryptApiKey(diskConfig.apiKey);
+      }
+
+      const tmpPath = this.configPath + '.tmp';
+      fs.writeFileSync(tmpPath, JSON.stringify(diskConfig, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, this.configPath);
+    } catch (err) {
+      console.error('Failed to write config to disk:', err);
+    }
   }
 
   private getDefaultConfig(): PersistedConfig {
@@ -41,6 +95,7 @@ export class StoreManager {
         cancelResponse: 'Escape',
         clearConversation: 'KeyL',
         toggleOverlay: 'KeyO',
+        toggleSystemAudio: 'KeyS',
       },
       audioDeviceId: null,
       inputMode: 'vad',
@@ -56,6 +111,13 @@ export class StoreManager {
         opacity: 90,
         theme: 'dark',
       },
+      systemPrompt: '',
+      audioInput: {
+        micEnabled: true,
+        micDeviceId: null,
+        systemAudioEnabled: false,
+      },
+      transcriptHeight: 150,
     };
   }
 }
