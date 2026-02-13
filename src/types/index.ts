@@ -13,6 +13,7 @@ export interface KeybindConfig {
   cancelResponse: string;
   clearConversation: string;
   toggleOverlay: string;
+  toggleSystemAudio: string;
 }
 
 export interface VADSettings {

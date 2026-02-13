@@ -6,7 +6,6 @@ import { audioCaptureService } from '@/services/AudioCaptureService';
 import { OverlayLayout } from '@/components/overlay/OverlayLayout';
 import { SettingsLayout } from '@/components/settings/SettingsLayout';
 import { Settings, Layers, Minimize2, Maximize2, Mic, MicOff, Monitor } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 function App() {
   const appMode = useSessionStore(s => s.appMode);
@@ -47,6 +46,8 @@ function App() {
     }
   }, [theme]);
 
+  const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+
   if (appMode === 'overlay') {
     return (
       <div className="h-screen w-screen bg-black">
@@ -64,87 +65,113 @@ function App() {
     );
   }
 
+  const headerHeight = isElectron ? 'h-[42px]' : '';
+  const headerPadding = isElectron ? 'pl-[78px] pr-3' : 'px-4 py-3';
+
   return (
-    <div className="h-screen w-screen flex flex-col bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold tracking-tight">APOST-Y</h1>
+    <div className={`h-screen w-screen flex flex-col text-[hsl(var(--foreground))] ${isElectron ? 'bg-transparent' : 'bg-[hsl(var(--background))]'}`}>
+      <header
+        className={`flex items-center justify-between shrink-0 border-b border-white/[0.06] ${headerHeight} ${headerPadding} ${isElectron ? 'bg-white/[0.03] backdrop-blur-2xl' : 'border-[hsl(var(--border))]'}`}
+        style={isElectron ? { WebkitAppRegion: 'drag' } as React.CSSProperties : undefined}
+      >
+        <div
+          className="flex items-center gap-2.5"
+          style={isElectron ? { WebkitAppRegion: 'no-drag' } as React.CSSProperties : undefined}
+        >
+          <h1 className={`font-semibold tracking-tight ${isElectron ? 'text-[13px]' : 'text-lg font-bold'}`}>APOST-Y</h1>
           <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${
+            <div className={`w-1.5 h-1.5 rounded-full ${
               connectionStatus === 'connected' ? 'bg-green-500' :
               connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
               'bg-red-500'
             }`} />
-            <span className="text-xs text-[hsl(var(--muted-foreground))]">
+            <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
               {connectionStatus}
             </span>
           </div>
 
           {connectionStatus === 'connected' && (
-            <div className="flex items-center gap-2 ml-2 pl-3 border-l border-[hsl(var(--border))]">
-              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs ${
+            <div className="flex items-center gap-1.5 ml-1 pl-2.5 border-l border-white/[0.08]">
+              <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] ${
                 isMuted
                   ? 'bg-red-500/15 text-red-400'
                   : micActive
                     ? 'bg-green-500/15 text-green-400'
-                    : 'bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]'
+                    : 'text-[hsl(var(--muted-foreground))]'
               }`}>
-                {isMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                <span>{isMuted ? 'Muted' : micActive ? 'Mic On' : 'Mic'}</span>
+                {isMuted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                <span>{isMuted ? 'Muted' : micActive ? 'On' : 'Mic'}</span>
               </div>
 
               {sysActive && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs bg-blue-500/15 text-blue-400">
-                  <Monitor className="h-3.5 w-3.5" />
-                  <span>System</span>
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-500/15 text-blue-400">
+                  <Monitor className="h-3 w-3" />
+                  <span>Sys</span>
                 </div>
               )}
 
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">
+              <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
                 {inputMode === 'vad' ? 'VAD' : 'PTT'}
               </span>
 
               {isListening && (
-                <span className="text-xs text-green-400 animate-pulse">Listening</span>
+                <span className="text-[11px] text-green-400 animate-pulse">Listening</span>
               )}
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-1.5"
+          style={isElectron ? { WebkitAppRegion: 'no-drag' } as React.CSSProperties : undefined}
+        >
           {connectionStatus === 'disconnected' ? (
-            <Button size="sm" onClick={connect}>Connect</Button>
+            <button
+              onClick={connect}
+              className={`px-3 rounded-md text-[12px] font-medium transition-colors bg-white text-black hover:bg-white/90 ${isElectron ? 'h-[26px]' : 'h-7'}`}
+            >
+              Connect
+            </button>
           ) : (
-            <Button size="sm" variant="outline" onClick={disconnect}>Disconnect</Button>
+            <button
+              onClick={disconnect}
+              className={`px-3 rounded-md text-[12px] font-medium transition-colors border border-white/[0.12] text-[hsl(var(--muted-foreground))] hover:bg-white/[0.06] ${isElectron ? 'h-[26px]' : 'h-7'}`}
+            >
+              Disconnect
+            </button>
           )}
-          <div className="flex items-center rounded-md border border-[hsl(var(--border))] overflow-hidden">
+          <div className="flex items-center rounded-md border border-white/[0.12] overflow-hidden">
             <button
               onClick={() => setActivePanel('transcript')}
-              className={`px-3 py-1.5 text-sm transition-colors ${
+              className={`px-2 transition-colors ${isElectron ? 'h-[26px]' : 'h-7 px-3'} ${
                 activePanel === 'transcript'
-                  ? 'bg-white text-black'
-                  : 'hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]'
+                  ? 'bg-white/[0.12] text-white'
+                  : 'hover:bg-white/[0.06] text-[hsl(var(--muted-foreground))]'
               }`}
             >
-              <Layers size={14} />
+              <Layers size={13} />
             </button>
             <button
               onClick={() => setActivePanel('settings')}
-              className={`px-3 py-1.5 text-sm transition-colors ${
+              className={`px-2 transition-colors ${isElectron ? 'h-[26px]' : 'h-7 px-3'} ${
                 activePanel === 'settings'
-                  ? 'bg-white text-black'
-                  : 'hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))]'
+                  ? 'bg-white/[0.12] text-white'
+                  : 'hover:bg-white/[0.06] text-[hsl(var(--muted-foreground))]'
               }`}
             >
-              <Settings size={14} />
+              <Settings size={13} />
             </button>
           </div>
-          <Button size="sm" variant="ghost" onClick={toggleAppMode} title="Enter Overlay Mode">
-            <Minimize2 size={14} />
-          </Button>
+          <button
+            onClick={toggleAppMode}
+            title="Enter Overlay Mode"
+            className={`px-1.5 rounded-md transition-colors text-[hsl(var(--muted-foreground))] hover:bg-white/[0.06] hover:text-white ${isElectron ? 'h-[26px]' : 'h-7'}`}
+          >
+            <Minimize2 size={13} />
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden">
+      <main className={`flex-1 overflow-hidden ${isElectron ? 'bg-[hsl(var(--background))]/95' : ''}`}>
         {activePanel === 'transcript' ? (
           <div className="h-full p-4 overflow-hidden">
             <OverlayLayout />

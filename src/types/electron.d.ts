@@ -1,11 +1,35 @@
-export interface ElectronAPI {
-  getConfig: () => Promise<import('./index').PersistedConfig>;
-  setConfig: (config: import('./index').PersistedConfig) => Promise<void>;
-  onKeybind: (callback: (action: string) => void) => void;
-  removeKeybindListeners: () => void;
-  setOverlayMode: (enabled: boolean) => void;
-  getAudioDevices: () => Promise<MediaDeviceInfo[]>;
-  platform: string;
+import type { PersistedConfig } from './index';
+
+interface ElectronWindowAPI {
+  toggleOverlay: () => Promise<boolean>;
+  setOpacity: (value: number) => Promise<void>;
+  setAlwaysOnTop: (enabled: boolean) => Promise<void>;
+  setClickThrough: (enabled: boolean) => Promise<void>;
+}
+
+interface ElectronHotkeyAPI {
+  onHotkeyEvent: (callback: (action: string) => void) => () => void;
+}
+
+interface ElectronConfigAPI {
+  getConfig: () => Promise<PersistedConfig>;
+  setConfig: (config: PersistedConfig) => Promise<void>;
+}
+
+interface ElectronAppAPI {
+  getVersion: () => Promise<string>;
+}
+
+interface ElectronServerAPI {
+  getPort: () => Promise<number>;
+}
+
+interface ElectronAPI {
+  window: ElectronWindowAPI;
+  hotkey: ElectronHotkeyAPI;
+  config: ElectronConfigAPI;
+  app: ElectronAppAPI;
+  server: ElectronServerAPI;
 }
 
 declare global {
@@ -13,3 +37,5 @@ declare global {
     electronAPI?: ElectronAPI;
   }
 }
+
+export type { ElectronAPI };

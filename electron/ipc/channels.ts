@@ -15,4 +15,11 @@ export const IPC_CHANNELS = {
   APP: {
     GET_VERSION: 'app:get-version',
   },
+  SERVER: {
+    GET_PORT: 'server:get-port',
+  },
+  TRAY: {
+    MUTE_CHANGED: 'tray:mute-changed',
+    OVERLAY_TOGGLED: 'tray:overlay-toggled',
+  },
 } as const;

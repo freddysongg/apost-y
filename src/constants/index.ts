@@ -2,11 +2,12 @@ import type { KeybindConfig, VADSettings, UIConfig, NoteSet } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export const DEFAULT_KEYBINDS: KeybindConfig = {
-  pushToTalk: 'Space',
-  toggleMute: 'KeyM',
-  cancelResponse: 'Escape',
-  clearConversation: 'KeyL',
-  toggleOverlay: 'KeyO',
+  pushToTalk: 'Cmd+Shift+Space',
+  toggleMute: 'Cmd+Shift+KeyM',
+  cancelResponse: 'Cmd+Shift+Escape',
+  clearConversation: 'Cmd+Shift+KeyL',
+  toggleOverlay: 'Cmd+Shift+KeyO',
+  toggleSystemAudio: 'Cmd+Shift+KeyS',
 };
 
 export const DEFAULT_VAD_SETTINGS: VADSettings = {
