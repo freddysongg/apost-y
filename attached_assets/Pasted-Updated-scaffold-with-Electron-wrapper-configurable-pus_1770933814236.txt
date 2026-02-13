@@ -1,0 +1,495 @@
+Updated scaffold with Electron wrapper, configurable push-to-talk keybinds, and shadcn/ui for settings surfaces.
+
+Updated System Overview
+Electron app wrapping a React (Vite) SPA. Always-on-top overlay mode for during assessment, full windowed mode for configuration/admin. OpenAI Realtime API over WebSocket, text-only output, audio input. shadcn/ui for all settings and admin panels.
+
+Updated Requirements
+Functional (additions)
+
+Electron wrapper with always-on-top toggle
+System tray integration for quick mute/show/hide
+Configurable keybinds for push-to-talk, mute, cancel, clear — user can set any key combo
+Global hotkeys that work even when app is not focused (Electron globalShortcut)
+Toggle between VAD mode and push-to-talk mode
+Admin/settings panel using shadcn/ui for: keybind configuration, API key management, notes/content management, audio device selection, VAD tuning, UI preferences (font size, opacity, theme)
+Content management: multiple note sets (e.g., "10-codes", "penal codes", "traffic stops") that can be toggled on/off per session
+Window opacity slider for overlay mode
+
+Non-Functional (additions)
+
+Electron app builds for Windows (primary) and macOS
+Global hotkeys work when Electron window is not focused
+Overlay mode: frameless, transparent background, click-through optional
+Settings persist across sessions via electron-store
+
+
+Updated Architecture
+┌──────────────────────────────────────────────────┐
+│                 Electron Main Process             │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │ Window   │  │ GlobalHotkey │  │ Tray       │  │
+│  │ Manager  │  │ Manager      │  │ Manager    │  │
+│  └────┬─────┘  └──────┬───────┘  └─────┬──────┘  │
+│       │               │                │          │
+│       │         IPC Bridge (preload)    │          │
+│───────┼───────────────┼────────────────┼──────────│
+│       ▼               ▼                ▼          │
+│              Renderer Process (React)             │
+│                                                   │
+│  ┌────────────┐  ┌─────────────────┐              │
+│  │ AudioCapture│→│ RealtimeService  │── WS ──→ OpenAI
+│  │ Service    │  │                  │              │
+│  └────────────┘  └────────┬────────┘              │
+│                           │                       │
+│                   ┌───────▼────────┐              │
+│                   │  SessionStore   │              │
+│                   │  (Zustand)      │              │
+│                   └───────┬────────┘              │
+│                           │                       │
+│    ┌──────────────────────┼──────────────────┐    │
+│    │              │               │           │    │
+│  ┌─▼──────┐  ┌───▼────────┐  ┌───▼─────┐  ┌─▼─┐  │
+│  │Overlay │  │SettingsPanel│  │Transcript│  │...│  │
+│  │View    │  │(shadcn/ui)  │  │Panel     │  │   │  │
+│  └────────┘  └─────────────┘  └─────────┘  └───┘  │
+└──────────────────────────────────────────────────┘
+
+Electron Main Process Modules
+main.ts — Entry Point
+
+Create BrowserWindow with frameless option
+Load Vite dev server (dev) or built HTML (prod)
+Initialize all managers
+
+WindowManager
+Purpose: Controls window state, overlay mode, always-on-top
+Responsibilities:
+
+Toggle between overlay mode (frameless, transparent, always-on-top, reduced size) and full mode (standard window, settings accessible)
+Window opacity control
+Click-through toggle in overlay mode
+Persist window bounds and mode to electron-store
+
+IPC Channels:
+window:toggle-overlay
+window:set-opacity        (opacity: number)
+window:set-always-on-top  (enabled: boolean)
+window:set-click-through  (enabled: boolean)
+window:minimize-to-tray
+GlobalHotkeyManager
+Purpose: Registers system-wide hotkeys that work when app is unfocused
+Responsibilities:
+
+Register/unregister global shortcuts via globalShortcut
+Read keybind config from electron-store
+Update keybinds at runtime when user changes settings
+Forward hotkey events to renderer via IPC
+
+IPC Channels:
+hotkey:push-to-talk-down
+hotkey:push-to-talk-up
+hotkey:toggle-mute
+hotkey:cancel-response
+hotkey:clear-conversation
+hotkey:toggle-overlay
+hotkey:update-keybinds     (keybinds: KeybindConfig)
+hotkey:get-keybinds        → KeybindConfig
+TrayManager
+Purpose: System tray icon with quick actions
+Menu Items:
+
+Show/Hide window
+Mute/Unmute
+Toggle overlay mode
+Connection status indicator
+Quit
+
+StoreManager (electron-store)
+Purpose: Persistent config storage
+Schema:
+typescriptinterface PersistedConfig {
+  apiKey: string | null
+  keybinds: KeybindConfig
+  audioDeviceId: string | null
+  inputMode: 'vad' | 'push-to-talk'
+  vadSettings: VADSettings
+  noteSets: NoteSet[]
+  activeNoteSetIds: string[]
+  ui: {
+    fontSize: number
+    opacity: number
+    theme: 'dark' | 'light'
+    overlayBounds: { x: number; y: number; width: number; height: number }
+    fullBounds: { x: number; y: number; width: number; height: number }
+  }
+}
+
+Preload / IPC Bridge
+preload.ts
+Exposes safe IPC methods to renderer via contextBridge:
+typescriptinterface ElectronAPI {
+  // Window
+  toggleOverlay(): void
+  setOpacity(value: number): void
+  setAlwaysOnTop(enabled: boolean): void
+
+  // Hotkeys
+  onHotkeyEvent(callback: (event: string) => void): void
+  updateKeybinds(keybinds: KeybindConfig): void
+  getKeybinds(): Promise<KeybindConfig>
+
+  // Persistent storage
+  getConfig<K extends keyof PersistedConfig>(key: K): Promise<PersistedConfig[K]>
+  setConfig<K extends keyof PersistedConfig>(key: K, value: PersistedConfig[K]): void
+
+  // App
+  getVersion(): string
+}
+
+Updated Services
+RealtimeService — same as before, no changes
+AudioCaptureService — same as before, no changes
+NotesService — Updated
+Now manages multiple note sets instead of a single blob.
+typescriptinterface NoteSet {
+  id: string
+  name: string           // e.g., "10-Codes", "Penal Codes", "Traffic Stop Procedures"
+  content: string
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+}
+```
+
+**Key Methods:**
+```
+getNoteSets(): NoteSet[]
+addNoteSet(name: string, content: string): NoteSet
+updateNoteSet(id: string, updates: Partial<NoteSet>): void
+deleteNoteSet(id: string): void
+toggleNoteSet(id: string): void
+buildSystemPrompt(): string          // combines all enabled note sets
+```
+
+**System prompt now built as:**
+```
+...
+REFERENCE NOTES:
+
+## 10-Codes
+---
+{10_codes_content}
+---
+
+## Penal Codes
+---
+{penal_codes_content}
+---
+
+## Traffic Stop Procedures
+---
+{traffic_stop_content}
+---
+NEW: KeybindService
+Purpose: Manages keybind configuration and communicates with Electron main process
+typescriptinterface KeybindConfig {
+  pushToTalk: string        // e.g., "CmdOrCtrl+Shift+Space"
+  toggleMute: string        // e.g., "CmdOrCtrl+Shift+M"
+  cancelResponse: string    // e.g., "Escape"
+  clearConversation: string // e.g., "CmdOrCtrl+Shift+L"
+  toggleOverlay: string     // e.g., "CmdOrCtrl+Shift+O"
+}
+```
+
+**Key Methods:**
+```
+getKeybinds(): Promise<KeybindConfig>
+updateKeybind(action: string, accelerator: string): Promise<void>
+resetToDefaults(): Promise<void>
+validateAccelerator(accelerator: string): boolean
+recordKeybind(): Promise<string>    // enters "press any key" mode, returns accelerator
+
+Updated Store (Zustand)
+typescriptinterface SessionStore {
+  // Connection
+  connectionStatus: 'disconnected' | 'connecting' | 'connected'
+  apiKey: string | null
+
+  // Audio
+  isMuted: boolean
+  isListening: boolean
+  isPushToTalkActive: boolean
+  inputMode: 'vad' | 'push-to-talk'
+  selectedDeviceId: string | null
+
+  // Conversation
+  transcript: TranscriptEntry[]
+  currentAnswer: string
+  isAnswering: boolean
+
+  // Notes
+  noteSets: NoteSet[]
+  activeNoteSetIds: string[]
+
+  // UI
+  appMode: 'overlay' | 'full'
+  activePanel: 'transcript' | 'settings' | 'notes'
+  fontSize: number
+  opacity: number
+
+  // Keybinds
+  keybinds: KeybindConfig
+  isRecordingKeybind: boolean
+  recordingAction: string | null
+
+  // Actions
+  setApiKey(key: string): void
+  toggleMute(): void
+  setInputMode(mode: 'vad' | 'push-to-talk'): void
+  setPushToTalkActive(active: boolean): void
+  appendTranscript(entry: TranscriptEntry): void
+  appendAnswerDelta(delta: string): void
+  finalizeAnswer(): void
+  clearConversation(): void
+  toggleAppMode(): void
+  setActivePanel(panel: string): void
+  // ... note set actions
+  // ... keybind actions
+}
+
+Updated DTOs / Types
+typescript// Everything from before, plus:
+
+interface NoteSet {
+  id: string
+  name: string
+  content: string
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+interface KeybindConfig {
+  pushToTalk: string
+  toggleMute: string
+  cancelResponse: string
+  clearConversation: string
+  toggleOverlay: string
+}
+
+interface VADSettings {
+  threshold: number            // 0.0 - 1.0
+  prefixPaddingMs: number      // default 300
+  silenceDurationMs: number    // default 500
+}
+
+interface UIConfig {
+  fontSize: number             // 14 - 32
+  opacity: number              // 0.3 - 1.0
+  theme: 'dark' | 'light'
+}
+
+interface WindowState {
+  mode: 'overlay' | 'full'
+  overlayBounds: Bounds
+  fullBounds: Bounds
+}
+
+interface Bounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+```
+
+---
+
+## Updated Components
+
+### Overlay View Components (during assessment)
+
+#### `OverlayLayout`
+- Minimal chrome, dark semi-transparent background
+- Shows only: `AnswerPanel`, `TranscriptPanel` (compact), `StatusBar`
+- Draggable title bar region
+
+#### `AnswerPanel` — same as before but with opacity support
+
+#### `TranscriptPanel` — same as before, compact mode in overlay
+
+#### `StatusBar`
+- Connection dot
+- Input mode indicator (VAD / PTT)
+- Listening/speaking indicator
+- Mute status
+- "Press [key] to talk" hint when in PTT mode
+
+### Full View Components (settings/admin — shadcn/ui)
+
+#### `SettingsLayout`
+- Sidebar navigation using shadcn `Tabs` or custom nav
+- Sections: General, Audio, Keybinds, Notes, Appearance
+
+#### `GeneralSettings`
+- API key input with show/hide toggle (`shadcn Input` + `Button`)
+- Model selection dropdown (`shadcn Select`)
+- Connection test button
+
+#### `AudioSettings`
+- Audio device selector (`shadcn Select`)
+- Input mode toggle: VAD vs Push-to-Talk (`shadcn RadioGroup`)
+- VAD sensitivity slider (`shadcn Slider`)
+- VAD silence duration slider
+- Audio level meter (canvas visualization)
+- Test mic button
+
+#### `KeybindSettings`
+- Table of all actions with current keybind (`shadcn Table`)
+- Click a keybind → enters recording mode → "Press any key combo..." → captures and saves
+- Reset to defaults button (`shadcn Button`)
+- Conflict detection (warns if same combo assigned twice)
+```
+┌──────────────────────────────────────────┐
+│ Action              │ Keybind            │
+├─────────────────────┼────────────────────┤
+│ Push to Talk        │ [Ctrl+Shift+Space] │ ← click to rebind
+│ Toggle Mute         │ [Ctrl+Shift+M]     │
+│ Cancel Response     │ [Escape]           │
+│ Clear Conversation  │ [Ctrl+Shift+L]     │
+│ Toggle Overlay      │ [Ctrl+Shift+O]     │
+└──────────────────────────────────────────┘
+```
+
+#### `NotesManager`
+- List of note sets with enable/disable toggles (`shadcn Switch`)
+- Add new note set (`shadcn Dialog` with name input + large `Textarea`)
+- Edit existing note set (inline or dialog)
+- Delete with confirmation (`shadcn AlertDialog`)
+- Import from `.txt` file
+- Token count per note set + total active tokens
+- Drag to reorder priority (`optional`)
+
+#### `AppearanceSettings`
+- Font size slider (`shadcn Slider`)
+- Window opacity slider
+- Theme toggle dark/light (`shadcn Switch`)
+- Preview of how overlay will look
+
+---
+
+## Updated Hooks
+```
+useHotkeys.ts          → listens to Electron IPC hotkey events, dispatches store actions
+useAudioDevices.ts     → enumerates audio input devices
+useKeybindRecorder.ts  → "press any key" capture logic for settings
+useElectronAPI.ts      → typed wrapper around window.electronAPI
+usePersistence.ts      → syncs Zustand store ↔ electron-store on changes
+```
+
+---
+
+## Updated File Structure
+```
+├── electron/
+│   ├── main.ts
+│   ├── preload.ts
+│   ├── managers/
+│   │   ├── WindowManager.ts
+│   │   ├── GlobalHotkeyManager.ts
+│   │   ├── TrayManager.ts
+│   │   └── StoreManager.ts
+│   └── ipc/
+│       └── channels.ts            // IPC channel name constants
+│
+├── src/
+│   ├── main.tsx
+│   ├── App.tsx
+│   │
+│   ├── services/
+│   │   ├── RealtimeService.ts
+│   │   ├── AudioCaptureService.ts
+│   │   ├── NotesService.ts
+│   │   └── KeybindService.ts
+│   │
+│   ├── store/
+│   │   └── sessionStore.ts
+│   │
+│   ├── components/
+│   │   ├── overlay/
+│   │   │   ├── OverlayLayout.tsx
+│   │   │   ├── AnswerPanel.tsx
+│   │   │   ├── TranscriptPanel.tsx
+│   │   │   └── StatusBar.tsx
+│   │   │
+│   │   ├── settings/
+│   │   │   ├── SettingsLayout.tsx
+│   │   │   ├── GeneralSettings.tsx
+│   │   │   ├── AudioSettings.tsx
+│   │   │   ├── KeybindSettings.tsx
+│   │   │   ├── NotesManager.tsx
+│   │   │   └── AppearanceSettings.tsx
+│   │   │
+│   │   └── shared/
+│   │       ├── ConnectionIndicator.tsx
+│   │       └── AudioLevelMeter.tsx
+│   │
+│   ├── hooks/
+│   │   ├── useHotkeys.ts
+│   │   ├── useAudioDevices.ts
+│   │   ├── useKeybindRecorder.ts
+│   │   ├── useElectronAPI.ts
+│   │   └── usePersistence.ts
+│   │
+│   ├── types/
+│   │   ├── index.ts
+│   │   ├── electron.d.ts         // window.electronAPI types
+│   │   └── realtime.ts           // OpenAI Realtime API event types
+│   │
+│   ├── utils/
+│   │   ├── audioEncoder.ts
+│   │   └── formatters.ts
+│   │
+│   ├── constants/
+│   │   └── index.ts
+│   │
+│   └── lib/
+│       └── utils.ts              // shadcn/ui cn() helper
+│
+├── components.json                // shadcn/ui config
+├── electron-builder.yml           // build config for Windows/macOS
+├── package.json
+├── tsconfig.json
+├── tsconfig.electron.json
+├── vite.config.ts
+└── tailwind.config.ts
+```
+
+---
+
+## Default Keybinds
+
+| Action | Windows | macOS |
+|---|---|---|
+| Push to Talk | `Ctrl+Shift+Space` | `Cmd+Shift+Space` |
+| Toggle Mute | `Ctrl+Shift+M` | `Cmd+Shift+M` |
+| Cancel Response | `Escape` | `Escape` |
+| Clear Conversation | `Ctrl+Shift+L` | `Cmd+Shift+L` |
+| Toggle Overlay/Full | `Ctrl+Shift+O` | `Cmd+Shift+O` |
+
+---
+
+## shadcn/ui Components Needed
+```
+npx shadcn@latest add button input select slider switch
+npx shadcn@latest add tabs table dialog alert-dialog
+npx shadcn@latest add textarea radio-group label badge
+npx shadcn@latest add tooltip scroll-area separator
+
+Edge Cases (additions)
+
+Global hotkey conflicts: If the user's keybind conflicts with another app's global shortcut, registration will fail silently — surface this in the UI with a warning badge
+Keybind recording captures modifier-only: Reject combos that are just modifiers (Ctrl alone, Shift alone) — require at least one non-modifier key
+Overlay mode + settings access: Need a quick way to pop out of overlay into full mode — either tray menu or a small gear icon in overlay corner
+Multiple note sets exceeding context: Show total token estimate, warn when approaching limit, allow user to prioritize which sets load first
+Electron vs browser dev: Support running as plain React app in browser for dev/testing (gracefully degrade when window.electronAPI is undefined)
