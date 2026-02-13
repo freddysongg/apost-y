@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { PersistedConfig } from '../../src/types';
@@ -23,6 +23,23 @@ export class StoreManager {
     this.writeToDisk(config);
   }
 
+  private encryptApiKey(key: string): string {
+    if (!safeStorage.isEncryptionAvailable()) return key;
+    const encrypted = safeStorage.encryptString(key);
+    return encrypted.toString('base64');
+  }
+
+  private decryptApiKey(stored: string): string {
+    if (!safeStorage.isEncryptionAvailable()) return stored;
+    try {
+      const buffer = Buffer.from(stored, 'base64');
+      return safeStorage.decryptString(buffer);
+    } catch {
+      // Stored as plain text from a previous version — return as-is
+      return stored;
+    }
+  }
+
   private readFromDisk(): PersistedConfig {
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
@@ -34,6 +51,11 @@ export class StoreManager {
         merged.vadSettings = { ...defaults.vadSettings, ...merged.vadSettings };
         merged.audioInput = { ...defaults.audioInput, ...merged.audioInput };
         merged.ui = { ...defaults.ui, ...merged.ui };
+
+        if (merged.apiKey) {
+          merged.apiKey = this.decryptApiKey(merged.apiKey);
+        }
+
         return merged;
       }
     } catch {
@@ -50,8 +72,14 @@ export class StoreManager {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
+
+      const diskConfig = { ...config };
+      if (diskConfig.apiKey) {
+        diskConfig.apiKey = this.encryptApiKey(diskConfig.apiKey);
+      }
+
       const tmpPath = this.configPath + '.tmp';
-      fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
+      fs.writeFileSync(tmpPath, JSON.stringify(diskConfig, null, 2), 'utf-8');
       fs.renameSync(tmpPath, this.configPath);
     } catch (err) {
       console.error('Failed to write config to disk:', err);
